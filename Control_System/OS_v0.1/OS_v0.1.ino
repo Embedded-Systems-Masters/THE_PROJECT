@@ -26,15 +26,24 @@
 /**********************************************************************/
 
 // Task struct to hold task information
+typedef enum { READY, RUNNING, WAITING, SUSPENDED, FINISHED } TaskState;
+
 typedef struct {
-  void (*taskFunction)(); // Pointer to the task function
-  unsigned long period;   // Task period in milliseconds
-  unsigned long lastRun;  // Last time the task was run
-  int priority;           // Task priority (higher number = higher priority)
+  void (*taskFunction)();    // Pointer to the task function
+  unsigned long period;      // Task period in milliseconds (0 for event-driven tasks)
+  unsigned long lastRun;     // Last time the task was run
+  unsigned long delayUntil;  // Time until the task should resume
+  unsigned long elapsedTime; // Time the task has been running
+  int priority;              // Task priority (higher number = higher priority)
+  TaskState state;           // Current state of the task
 } Task_t;
 
+
+typedef unsigned int sens_t;  
 Task_t tasks[MAX_TASKS]={0};
 int taskCount = 0; 
+int currentTaskIndex = -1;
+
 
 void addTask(void (*taskFunction)(), unsigned long period, int priority) {
   if (taskCount < MAX_TASKS) {
@@ -45,10 +54,48 @@ void addTask(void (*taskFunction)(), unsigned long period, int priority) {
     tasks[i + 1].taskFunction = taskFunction;
     tasks[i + 1].period = period;
     tasks[i + 1].lastRun = millis();
+    tasks[i + 1].delayUntil = 0;
+    tasks[i + 1].elapsedTime = 0;
     tasks[i + 1].priority = priority;
+    tasks[i + 1].state = READY;
     taskCount++;
   }
 }
+
+void delayTask(unsigned long delayMillis) {
+  if (currentTaskIndex != -1) {
+    tasks[currentTaskIndex].delayUntil = millis() + delayMillis;
+    tasks[currentTaskIndex].state = SUSPENDED;
+  }
+
+} 
+void switchTask() {
+  // Save the state of the current task
+  if (currentTaskIndex != -1 && tasks[currentTaskIndex].state == RUNNING) {
+    tasks[currentTaskIndex].state = WAITING;
+  }
+
+  // Find the next READY or SUSPENDED task that should be resumed
+  int nextTaskIndex = -1;
+  unsigned long currentTime = millis();
+  for (int i = 0; i < taskCount; i++) {
+    if (tasks[i].state == READY || (tasks[i].state == SUSPENDED && currentTime >= tasks[i].delayUntil)) {
+      nextTaskIndex = i;
+      tasks[i].state = READY;
+      break;
+    }
+  }
+
+  // Switch to the next task
+  if (nextTaskIndex != -1) {
+    currentTaskIndex = nextTaskIndex;
+    tasks[currentTaskIndex].state = RUNNING;
+  } else {
+    currentTaskIndex = -1; // No READY or resumable task found
+  }
+}
+
+
 
 void scheduler()
 {
@@ -65,6 +112,7 @@ void scheduler()
       }
     }
   }
+  
 
   //if a high-priority task was found run it
   if(HighestPriorityTask != NULL)
@@ -88,7 +136,8 @@ void scheduler()
         }
       }
 
-      if (nextTask && nextTask->priority > highestPriorityTask->priority) {
+      if (nextTask && nextTask->priority > HighestPriorityTask->priority)
+      {
         break; // Exit early to allow higher-priority tasks to run
       }
     }
@@ -96,11 +145,36 @@ void scheduler()
 }
 
 void setup() {
+  // Add tasks
+  addTask(Red_LED, 1000, 1);               // Periodic task 1
+  addTask(Blue_LED, 500, 2);                // Periodic task 2
+  addTask(US_SENS, 250, 10);
   // put your setup code here, to run once:
 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  scheduler();
+}
+
+void task1() {
+  // Code for Task 1
+  pinMode(12, OUTPUT);
+  digitalWrite(12, HIGH);
+  digitalWrite(12,LOW);
+
+
+}
+
+void task2() {
+
+  pinMode(13, OUTPUT);
+  digitalWrite(13, HIGH);
+  digitalWrite(13, LOW);
+  // Code for Task 2
+}
+void US_SENS()
+{
 
 }
